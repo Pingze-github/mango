@@ -7,6 +7,8 @@
 
 from pymongo import MongoClient, errors
 
+__all__ = ['connection', 'db', 'BoolField', 'IntField', 'StringField', 'ListField', 'DictField', 'Model']
+
 global connection
 global db
 connection = None
@@ -36,35 +38,44 @@ def connect(
 
 class Field(object):
     _type = object
+    default = None
 
-    def __init__(self, field_name=None, index=False, unique=False):
+    def __init__(self, field_name=None, index=False, unique=False, default=None):
         self.name = field_name
         self.index = index
         self.unique = unique
+        self.default = default if default else self.default
 
     def __str__(self):
         return self.name
 
     def field_assert(self, value, name='?'):
-        if not isinstance(value, self._type):
+        if not isinstance(value, self._type) and value != None:
             raise TypeError('document.{} given not match the field "{}". It\'s class is "{}"'
                             .format(name, self.__class__.__name__, value.__class__.__name__))
 
     def setname(self, name):
         self.name = name
 
+class BoolField(Field):
+    _type = bool
+    default = False
 
 class IntField(Field):
     _type = int
+    default = 0
 
 class StringField(Field):
     _type = str
+    default = ''
 
 class ListField(Field):
     _type = list
+    default = []
 
 class DictField(Field):
     _type = dict
+    default = {}
 
 # ****** Model Funcs ******
 
@@ -153,7 +164,6 @@ class Model(object):
     def __init_subclass__(subcls, **kargs):
         subcls.Meta.collection = subcls.Meta.collection if hasattr(subcls.Meta, 'collection') else subcls.__name__.lower()
         collection = subcls.Meta.database[subcls.Meta.collection]
-        print(dir(collection))
         if hasattr(subcls.Meta, 'index'):
             for index in subcls.Meta.index:
                 try:
@@ -180,15 +190,15 @@ class Model(object):
             if isinstance(field, Field):
                 if not field.name:
                     field.setname(attr_name)
-                if attr_name in kargs:
-                    kargs_v = kargs[attr_name]
+                if field.name in kargs:
+                    kargs_v = kargs[field.name]
                     field.field_assert(kargs_v, attr_name)
                     self.__setitem__(attr_name, kargs_v)
                 else:
-                    if self.__class__.Meta.strict:
+                    if hasattr(self.__class__.Meta, 'strict') and self.__class__.Meta.strict:
                         raise AttributeError('Model.{} not exists in real document'.format(attr_name))
                     else:
-                        self.__setitem__(attr_name, None)
+                        self.__setitem__(attr_name, field.default if field.default != None else None)
 
 
     def __getitem__(self, k):
@@ -203,6 +213,7 @@ class Model(object):
 
     @classmethod
     def filte_field(cls, field_dict):
+        # TODO 遍历所有dir(cls)，为field设置默认值
         new_dict = {}
         for key in field_dict:
             val = field_dict[key]
@@ -210,5 +221,18 @@ class Model(object):
                 continue
             getattr(cls, key).field_assert(val, key)
             new_dict[key] = val
+
+        for attr_name in dir(cls):
+            field = getattr(cls, attr_name)
+            if isinstance(field, Field):
+                if field.name in field_dict:
+                    val = field_dict[field.name]
+                    field.field_assert(val, field.name)
+                    new_dict[field.name] = val
+                else:
+                    if field.default != None:
+                        new_dict[field.name] = field.default
+
         return new_dict
 
+# TODO 存取时default

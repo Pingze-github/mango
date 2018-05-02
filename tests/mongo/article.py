@@ -14,4 +14,5 @@ class Article(Model):
     item_id = IntField(unique=True)
     title = StringField()
     content = StringField()
+    title2 = StringField(default='default title2')
 
