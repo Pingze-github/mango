@@ -4,15 +4,17 @@ from tests.mongo.dictionary import Dictionary
 
 Dictionary.find()
 
-doc = Article.find_one()
+doc = Article.find_one({}, ['item_id'])
 print(doc.item_id)
-print(doc.title)
+print('doc.title', doc.title)
+
 
 cursor = Article.find()
 # for i in Article.find().sort(Article.item_id, -1): 这里原生不能支持转str
-for i in Article.find().sort(Article.item_id.name, -1):
+for i in Article.find({}, ['title']).sort(Article.item_id.name, -1):
     print(Article(**i).item_id)
     print(Article(i).title)
+exit()
 
 print(Article.create(
     item_id=2,

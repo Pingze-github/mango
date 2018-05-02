@@ -14,14 +14,14 @@ db = None
 
 def connect(
     database,
-    ip='127.0.0.1',
+    host='127.0.0.1',
     port=27017,
     username=None,
     password=None,
 ):
     global connection, db
     connection = MongoClient(
-        ip,
+        host,
         port,
         username=username,
         password=password,
@@ -239,3 +239,5 @@ class Model(object):
                         new_dict[field.name] = field.default
 
         return new_dict
+
+# TODO find支持指定fields
