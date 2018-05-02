@@ -11,7 +11,8 @@ class Article(Model):
         ]
         database = DB
 
-    item_id = IntField(unique=True)
+    item_id = NumberField(unique=True)
+    views = NumberField()
     title = StringField()
     content = StringField()
     title2 = StringField(default='default title2')

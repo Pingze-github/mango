@@ -1,13 +1,9 @@
-# mongo的ORM库
-# 宗旨：
-# API尽量贴合mongo原生pymongo
-# 转换pymongo的字典为对象
-# 具有简单的校验，
-# 可管理index
+# a Mongodb ORM
+# 贴近原生的API | 简单的声明方式 | 完整的基本功能
 
 from pymongo import MongoClient, errors
 
-__all__ = ['connection', 'db', 'BoolField', 'IntField', 'StringField', 'ListField', 'DictField', 'Model']
+__all__ = ['connection', 'db', 'BoolField', 'IntField', 'FloatField', 'NumberField', 'StringField', 'ListField', 'DictField', 'Model']
 
 global connection
 global db
@@ -50,7 +46,9 @@ class Field(object):
         return self.name
 
     def field_assert(self, value, name='?'):
-        if not isinstance(value, self._type) and value != None:
+        if type(self._type) != list:
+            self._type = [self._type]
+        if not type(value) in self._type and value != None:
             raise TypeError('document.{} given not match the field "{}". It\'s class is "{}"'
                             .format(name, self.__class__.__name__, value.__class__.__name__))
 
@@ -61,9 +59,17 @@ class BoolField(Field):
     _type = bool
     default = False
 
+class NumberField(Field):
+    _type = [int, float]
+    default = 0
+
 class IntField(Field):
     _type = int
     default = 0
+
+class FloatField(Field):
+    _type = float
+    default = 0.0
 
 class StringField(Field):
     _type = str
@@ -213,7 +219,6 @@ class Model(object):
 
     @classmethod
     def filte_field(cls, field_dict):
-        # TODO 遍历所有dir(cls)，为field设置默认值
         new_dict = {}
         for key in field_dict:
             val = field_dict[key]
@@ -234,5 +239,3 @@ class Model(object):
                         new_dict[field.name] = field.default
 
         return new_dict
-
-# TODO 存取时default
