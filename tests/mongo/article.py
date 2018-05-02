@@ -1,15 +1,17 @@
+
 from tests.mango import *
+
+from tests.mongo import DB
 
 class Article(Model):
     class Meta():
         collection = 'article'
         index = [
-            'item_id'
+            ('item_id', 1)
         ]
-        # TODO 在这里声明db，才能正常做初始化工作(声明子类时操作)
-        database = db
+        database = DB
 
-    item_id = IntField()
+    item_id = IntField(unique=True)
     title = StringField()
     content = StringField()
 

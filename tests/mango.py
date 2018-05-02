@@ -5,7 +5,7 @@
 # 具有简单的校验，
 # 可管理index
 
-from pymongo import MongoClient
+from pymongo import MongoClient, errors
 
 global connection
 global db
@@ -36,10 +36,23 @@ def connect(
 
 class Field(object):
     _type = object
-    def field_assert(self, value, name):
+
+    def __init__(self, field_name=None, index=False, unique=False):
+        self.name = field_name
+        self.index = index
+        self.unique = unique
+
+    def __str__(self):
+        return self.name
+
+    def field_assert(self, value, name='?'):
         if not isinstance(value, self._type):
             raise TypeError('document.{} given not match the field "{}". It\'s class is "{}"'
                             .format(name, self.__class__.__name__, value.__class__.__name__))
+
+    def setname(self, name):
+        self.name = name
+
 
 class IntField(Field):
     _type = int
@@ -57,6 +70,13 @@ class DictField(Field):
 # ****** Model ******
 
 class Model(object):
+    find = None
+    find_one = None
+    insert = None
+    create = None
+    update = None
+    remove = None
+
     class Meta():
         strict = False
         collection = None
@@ -66,10 +86,23 @@ class Model(object):
     # Python3.6及以上
     def __init_subclass__(subcls, **kargs):
         subcls.Meta.collection = subcls.Meta.collection if hasattr(subcls.Meta, 'collection') else subcls.__name__.lower()
-        if subcls.Meta.index:
-            print(subcls.Meta.database)
-            collection = subcls.Meta.database[subcls.Meta.collection]
-            print(collection)
+        collection = subcls.Meta.database[subcls.Meta.collection]
+        if hasattr(subcls.Meta, 'index'):
+            for index in subcls.Meta.index:
+                try:
+                    collection.create_index([index])
+                except errors.OperationFailure:
+                    pass
+        for attr_name in dir(subcls):
+            field = getattr(subcls, attr_name)
+            if isinstance(field, Field):
+                try:
+                    if field.unique:
+                        collection.create_index([(attr_name, -1 if field.index == -1 else 1)], unique=True)
+                    elif field.index:
+                        collection.create_index([(attr_name, -1 if field.index == -1 else 1)])
+                except errors.OperationFailure:
+                    pass
 
     def __init__(self, *args, **kargs):
         if args and not kargs and type(args[0]) == dict:
@@ -78,6 +111,8 @@ class Model(object):
         for attr_name in dir(self):
             field = self.__getitem__(attr_name)
             if isinstance(field, Field):
+                if not field.name:
+                    field.setname(attr_name)
                 if attr_name in kargs:
                     kargs_v = kargs[attr_name]
                     field.field_assert(kargs_v, attr_name)
@@ -96,21 +131,57 @@ class Model(object):
         setattr(self, k, v)
 
     @classmethod
-    def find_one(cls, *args, **kargs):
-        data_dict = db[cls.Meta.collection].find_one(*args, **kargs)
-        return cls.dict2obj(data_dict)
-
-    @classmethod
     def dict2obj(cls, data_dict):
         return cls(**data_dict)
 
     @classmethod
-    def find(cls, *args, **kargs):
-        cursor = db[cls.Meta.collection].find(*args, **kargs)
-        return cursor
+    def filte_field(cls, field_dict):
+        for key in field_dict:
+            val = field_dict[key]
+            if not hasattr(cls, key) or not isinstance(getattr(cls, key), Field):
+                continue
+            getattr(cls, key).field_assert(val, key)
 
+@classmethod
+def find(cls, *args, **kargs):
+    cursor = db[cls.Meta.collection].find(*args, **kargs)
+    # 可以实现直接返回Model对象，但这样返回字典手动转换，更灵活
+    return cursor
 
+@classmethod
+def find_one(cls, *args, **kargs):
+    data_dict = db[cls.Meta.collection].find_one(*args, **kargs)
+    return cls.dict2obj(data_dict)
 
-# TODO 如何实现多个实例
-# TODO 动态添加所有方法
-# TODO 有效封装find
+@classmethod
+def insert(cls, *args, **kargs):
+    cls.filte_field(args[0])
+    _id = db[cls.Meta.collection].insert(*args, **kargs)
+    return _id
+
+@classmethod
+def create(cls, **kargs):
+    cls.filte_field(kargs)
+    _id = db[cls.Meta.collection].insert(kargs)
+    return _id
+
+@classmethod
+def update(cls, *args, **kargs):
+    # cls.filte_field(args[0])
+    # TODO pymongo的update使用多重字典，无法直接做检查
+    returned = db[cls.Meta.collection].update(*args, **kargs)
+    return returned
+
+@classmethod
+def remove(cls, *args, **kargs):
+    # cls.filte_field(args[0])
+    # TODO pymongo的remove使用多重字典，无法直接做检查
+    returned = db[cls.Meta.collection].remove(*args, **kargs)
+    return returned
+
+setattr(Model, 'find', find)
+setattr(Model, 'find_one', find_one)
+setattr(Model, 'insert', insert)
+setattr(Model, 'create', create)
+setattr(Model, 'update', update)
+setattr(Model, 'remove', remove)
